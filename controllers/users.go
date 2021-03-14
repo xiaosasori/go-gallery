@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/xiaosasori/go-gallery/models"
+	"github.com/xiaosasori/go-gallery/rand"
 	"github.com/xiaosasori/go-gallery/views"
 )
 
@@ -54,6 +55,11 @@ func (u *Users) Create(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	err := u.signIn(w, &user)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	http.Redirect(w, r, "/cookieTest", http.StatusFound)
 }
 
 type LoginForm struct {
@@ -71,15 +77,58 @@ func (u *Users) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, err := u.us.Authenticate(form.Email, form.Password)
-	switch err {
-	case models.ErrNotFound:
-		fmt.Fprintln(w, "Invalid email address")
-	case models.ErrInvalidPassword:
-		fmt.Fprintln(w, "Invalid password provided")
-	case nil:
-		fmt.Println(w, user)
-	default:
+	if err != nil {
+		switch err {
+		case models.ErrNotFound:
+			fmt.Fprintln(w, "Invalid email address")
+		case models.ErrInvalidPassword:
+			fmt.Fprintln(w, "Invalid password provided")
+		default:
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+	err = u.signIn(w, user)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+	http.Redirect(w, r, "/cookieTest", http.StatusFound)
+}
 
+func (u *Users) signIn(w http.ResponseWriter, user *models.User) error {
+	if user.Remember == "" {
+		token, err := rand.RememberToken()
+		if err != nil {
+			return err
+		}
+		user.Remember = token
+		err = u.us.Update(user)
+		if err != nil {
+			return err
+		}
+	}
+
+	cookie := http.Cookie{
+		Name:     "remember_token",
+		Value:    user.Remember,
+		HttpOnly: true, // prevent XSS
+	}
+	http.SetCookie(w, &cookie)
+	return nil
+}
+
+// CookieTest is used to display cookies set on the current user
+func (u *Users) CookieTest(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("remember_token")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	user, err := u.us.ByRemember(cookie.Value)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Fprintln(w, user)
 }
