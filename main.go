@@ -21,11 +21,10 @@ func main() {
 	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
 		host, port, user, password, dbname)
 	us, err := models.NewUserService(psqlInfo)
-	if err != nil {
-		panic(err)
-	}
+	must(err)
 	defer us.Close()
-	us.DestructiveReset()
+	// us.DestructiveReset()
+	us.AutoMigrate()
 	// user := models.User{
 	// 	Name:  "MA",
 	// 	Email: "ma@gmail.com",
@@ -34,9 +33,7 @@ func main() {
 	// 	panic(err)
 	// }
 	user, err := us.ByID(1)
-	if err != nil {
-		panic(err)
-	}
+	must(err)
 	fmt.Println(user)
 	staticC := controllers.NewStatic()
 	usersC := controllers.NewUsers(us)
@@ -44,7 +41,15 @@ func main() {
 	r := mux.NewRouter()
 	r.Handle("/", staticC.Home).Methods("GET")
 	r.Handle("/contact", staticC.Contact).Methods("GET")
-	r.HandleFunc("/signup", usersC.New).Methods("GET")
+	r.Handle("/signup", usersC.NewView).Methods("GET")
 	r.HandleFunc("/signup", usersC.Create).Methods("POST")
+	r.Handle("/login", usersC.LoginView).Methods("GET")
+	r.HandleFunc("/login", usersC.Login).Methods("POST")
 	http.ListenAndServe(":3000", r)
+}
+
+func must(err error) {
+	if err != nil {
+		panic(err)
+	}
 }
