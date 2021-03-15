@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func testingUserService() (*UserService, error) {
+func testingUserService() (UserService, error) {
 	const (
 		host     = "arjuna.db.elephantsql.com"
 		port     = 5432
@@ -20,7 +20,6 @@ func testingUserService() (*UserService, error) {
 	if err != nil {
 		return nil, err
 	}
-	us.db.LogMode(false)
 	// Clear the users table between tests
 	us.DestructiveReset()
 	return us, nil
