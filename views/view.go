@@ -7,6 +7,8 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+
+	"github.com/xiaosasori/go-gallery/context"
 )
 
 var ViewsDir string = "views"
@@ -44,6 +46,7 @@ func (v *View) Render(w http.ResponseWriter, r *http.Request, data interface{}) 
 			Yield: data,
 		}
 	}
+	vd.User = context.User(r.Context())
 	var buf bytes.Buffer
 	if err := v.Template.ExecuteTemplate(&buf, v.Layout, vd); err != nil {
 		log.Println(err)
