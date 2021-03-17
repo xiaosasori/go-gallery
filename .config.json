@@ -1,0 +1,13 @@
+{
+"port": 3000,
+"env": "dev",
+"pepper": "secret-random-string",
+"hmac_key": "secret-hmac-key",
+"database": {
+  "host":     "arjuna.db.elephantsql.com",
+  "port":     5432,
+  "user":     "hwrvxfng",
+  "password": "RnzDzwy5Jg-1L9tI9hedGV3M1ykyZcpG",
+  "name":     "hwrvxfng"
+  }
+}

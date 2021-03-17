@@ -1,36 +1,50 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net/http"
 
+	"github.com/gorilla/csrf"
 	"github.com/gorilla/mux"
 	"github.com/xiaosasori/go-gallery/controllers"
+	"github.com/xiaosasori/go-gallery/email"
 	"github.com/xiaosasori/go-gallery/middleware"
 	"github.com/xiaosasori/go-gallery/models"
-)
-
-const (
-	host     = "arjuna.db.elephantsql.com"
-	port     = 5432
-	user     = "hwrvxfng"
-	password = "RnzDzwy5Jg-1L9tI9hedGV3M1ykyZcpG"
-	dbname   = "hwrvxfng"
+	"github.com/xiaosasori/go-gallery/rand"
 )
 
 func main() {
-	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
-		host, port, user, password, dbname)
-	services, err := models.NewServies(psqlInfo)
+	boolPtr := flag.Bool("prod", false, "Provide this flag in production. This ensures that a .config file is provided before the application starts.")
+	flag.Parse()
+	cfg := LoadConfig(*boolPtr)
+	dbCfg := cfg.Database
+	services, err := models.NewServices(
+		models.WithGorm(dbCfg.Dialect(), dbCfg.ConnectionInfo()),
+		models.WithLogMode(!cfg.IsProd()),
+		models.WithUser(cfg.Pepper, cfg.HMACKey),
+		models.WithGallery(),
+		models.WithImage(),
+	)
 	must(err)
 	defer services.Close()
 	// services.DestructiveReset()
 	services.AutoMigrate()
 
+	mgCfg := cfg.Mailgun
+	emailer := email.NewClient(
+		email.WithSender("Lenslocked.com Support", "support@mg.lenslocked.com"),
+		email.WithMailgun(mgCfg.Domain, mgCfg.APIKey),
+	)
+
 	r := mux.NewRouter()
 	staticC := controllers.NewStatic()
-	usersC := controllers.NewUsers(services.User)
+	usersC := controllers.NewUsers(services.User, emailer)
 	galleriesC := controllers.NewGalleries(services.Gallery, services.Image, r)
+
+	b, err := rand.Bytes(32)
+	must(err)
+	csrfMw := csrf.Protect(b, csrf.Secure(cfg.IsProd()))
 	userMw := middleware.User{
 		UserService: services.User,
 	}
@@ -43,7 +57,17 @@ func main() {
 	r.HandleFunc("/signup", usersC.Create).Methods("POST")
 	r.Handle("/login", usersC.LoginView).Methods("GET")
 	r.HandleFunc("/login", usersC.Login).Methods("POST")
+	r.HandleFunc("/logout",
+		requireUserMw.ApplyFn(usersC.Logout)).Methods("POST")
+	r.HandleFunc("/forgot", usersC.InitiateReset).Methods("POST")
+	r.HandleFunc("/reset", usersC.ResetPw).Methods("GET")
+	r.HandleFunc("/reset", usersC.CompleteReset).Methods("POST")
 	// r.HandleFunc("/cookietest", usersC.CookieTest).Methods("GET")
+
+	// Assets
+	assetHandler := http.FileServer(http.Dir("./assets/"))
+	assetHandler = http.StripPrefix("/assets/", assetHandler)
+	r.PathPrefix("/assets/").Handler(assetHandler)
 
 	// Image routes
 	imageHandler := http.FileServer(http.Dir("./images/"))
@@ -59,7 +83,7 @@ func main() {
 	r.HandleFunc("/galleries/{id:[0-9]+}/images", requireUserMw.ApplyFn(galleriesC.ImageUpload)).Methods("POST")
 	r.HandleFunc("/galleries/{id:[0-9]+}/{filename}/images", requireUserMw.ApplyFn(galleriesC.ImageDelete)).Methods("POST")
 	r.HandleFunc("/galleries/{id:[0-9]+}", galleriesC.Show).Methods("GET").Name(controllers.ShowGallery)
-	http.ListenAndServe(":3000", userMw.Apply(r))
+	http.ListenAndServe(fmt.Sprintf(":%d", cfg.Port), csrfMw(userMw.Apply(r)))
 }
 
 func must(err error) {
