@@ -29,7 +29,8 @@ func main() {
 	must(err)
 	defer services.Close()
 	// services.DestructiveReset()
-	services.AutoMigrate()
+	// services.AutoMigrate()
+	services.DestructiveReset()
 
 	mgCfg := cfg.Mailgun
 	emailer := email.NewClient(

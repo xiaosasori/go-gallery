@@ -13,13 +13,15 @@ import (
 	"github.com/xiaosasori/go-gallery/context"
 )
 
-var ViewsDir string = "views"
-var LayoutDir string = ViewsDir + "/layouts"
-var ViewsExt string = ".gohtml"
+var (
+	LayoutDir   string = "views/layouts/"
+	TemplateDir string = "views/"
+	TemplateExt string = ".gohtml"
+)
 
 func NewView(layout string, files ...string) *View {
-	files = addViewsDirPrefix(files)
-	files = addViewsExtSuffix(files)
+	addTemplatePath(files)
+	addTemplateExt(files)
 	files = append(files, layoutFiles()...)
 	t, err := template.New("").Funcs(template.FuncMap{
 		"csrfField": func() (template.HTML, error) {
@@ -41,12 +43,18 @@ type View struct {
 	Layout   string
 }
 
+func (v *View) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	v.Render(w, r, nil)
+}
+
+// Render is used to render the view with the predefined layout.
 func (v *View) Render(w http.ResponseWriter, r *http.Request, data interface{}) {
 	w.Header().Set("Content-Type", "text/html")
 	var vd Data
 	switch d := data.(type) {
 	case Data:
 		vd = d
+		// do nothing
 	default:
 		vd = Data{
 			Yield: data,
@@ -72,38 +80,36 @@ func (v *View) Render(w http.ResponseWriter, r *http.Request, data interface{}) 
 	io.Copy(w, &buf)
 }
 
-func (v *View) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	v.Render(w, r, nil)
-}
-
-// This function takes a slice of strings and prepends the
-// ViewsDir directory to the file paths.
-//
-// Eg the input ["home"] would result in the output ["views/home"]
-func addViewsDirPrefix(files []string) []string {
-	ret := make([]string, len(files))
-	for i, f := range files {
-		ret[i] = ViewsDir + "/" + f
-	}
-	return ret
-}
-
-// This function takes a slice of strings and appends the
-// ViewsExt suffix to the file paths.
-//
-// Eg the input ["home"] would result in the output ["home.gohtml"]
-func addViewsExtSuffix(files []string) []string {
-	ret := make([]string, len(files))
-	for i, f := range files {
-		ret[i] = f + ViewsExt
-	}
-	return ret
-}
-
+// layoutFiles returns a slice of strings representing
+// the layout files used in our application.
 func layoutFiles() []string {
-	files, err := filepath.Glob(LayoutDir + "/*" + ViewsExt)
+	files, err := filepath.Glob(LayoutDir + "*" + TemplateExt)
 	if err != nil {
 		panic(err)
 	}
 	return files
+}
+
+// addTemplatePath takes in a slice of strings
+// representing file paths for templates, and it prepends
+// the TemplateDir directory to each string in the slice
+//
+// Eg the input {"home"} would result in the output
+// {"views/home"} if TemplateDir == "views/"
+func addTemplatePath(files []string) {
+	for i, f := range files {
+		files[i] = TemplateDir + f
+	}
+}
+
+// addTemplateExt takes in a slice of strings
+// representing file paths for templates and it appends
+// the TemplateExt extension to each string in the slice
+//
+// Eg the input {"home"} would result in the output
+// {"home.gohtml"} if TemplateExt == ".gohtml"
+func addTemplateExt(files []string) {
+	for i, f := range files {
+		files[i] = f + TemplateExt
+	}
 }
